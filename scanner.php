@@ -1,78 +1,77 @@
+
 <?php
-// --- CONFIGURAZIONE ---
-$serverID = "LKWorldServer-IT-15"; 
-$fileDatabase = 'mondo337_temp.json'; // File temporaneo per il workflow
-$fileInput = 'database_mondo_337.json'; // File unico da cui recuperare i quadranti noti
-$backendURL = "http://backend1.lordsandknights.com"; 
+$serverID = "LKWorldServer-RE-IT-6";
+$fileDatabase = 'database_mondo_327.json';
+$backendURL = "http://backend3.lordsandknights.com";
 
 $tempMap = [];
 $puntiCaldi = []; 
 
-// 1. Carichiamo i quadranti già noti dal database unificato
-if (file_exists($fileInput)) {
-    $content = file_get_contents($fileInput);
+if (file_exists($fileDatabase)) {
+    $content = file_get_contents($fileDatabase);
     $currentData = json_decode($content, true);
+    
+    // Protezione contro file non validi
     if (is_array($currentData)) {
         foreach ($currentData as $entry) {
-            $key = $entry['x'] . "_" . $entry['y'];
-            $tempMap[$key] = $entry;
-            $jtileX = floor($entry['x'] / 32); 
-            $jtileY = floor($entry['y'] / 32);
-            $puntiCaldi[$jtileX . "_" . $jtileY] = ['x' => $jtileX, 'y' => $jtileY];
+            if (is_array($entry) && isset($entry['x'], $entry['y'])) {
+                $key = $entry['x'] . "_" . $entry['y'];
+                $tempMap[$key] = $entry;
+                $jtileX = floor($entry['x'] / 32); 
+                $jtileY = floor($entry['y'] / 32);
+                $puntiCaldi[$jtileX . "_" . $jtileY] = ['x' => $jtileX, 'y' => $jtileY];
+            }
         }
     }
 }
 
-echo "Dati caricati. Analisi di " . count($puntiCaldi) . " quadranti noti...\n";
+echo "Dati caricati. Analisi di " . count($puntiCaldi) . " quadranti conosciuti...\n";
 
-// Fase 1: Scansione zone note
+// Fase 1: Zone note
 foreach ($puntiCaldi as $zona) {
     processTile($zona['x'], $zona['y'], $serverID, $tempMap, $backendURL);
 }
 
-// Fase 2: Espansione (Raggio 150 dal centro del mondo 337)
-$centerX = 512; $centerY = 512; $raggio = 150;
-for ($r = 1; $r <= $raggio; $r++) {
-    $xMin = $centerX - $r; $xMax = $centerX + $r;
-    $yMin = $centerY - $r; $yMax = $centerY + $r;
-    for ($i = $xMin; $i <= $xMax; $i++) {
-        processTile(floor($i), floor($yMin), $serverID, $tempMap, $backendURL);
-        processTile(floor($i), floor($yMax), $serverID, $tempMap, $backendURL);
-    }
-    for ($j = $yMin + 1; $j < $yMax; $j++) {
-        processTile(floor($xMin), floor($j), $serverID, $tempMap, $backendURL);
-        processTile(floor($xMax), floor($j), $serverID, $tempMap, $backendURL);
-    }
+// Fase 2: Espansione (Raggio 150)
+$centerX = 503; $centerY = 503;
+if (count($tempMap) > 0) {
+    $sumX = 0; $sumY = 0;
+    foreach ($tempMap as $h) { $sumX += floor($h['x']/32); $sumY += floor($h['y']/32); }
+    $centerX = round($sumX / count($tempMap));
+    $centerY = round($sumY / count($tempMap));
 }
 
-// Pulizia (72h) e salvataggio nel file temporaneo
-$limite = time() - (72 * 3600);
-$mappaPulita = array_filter($tempMap, function($e) use ($limite) { 
-    return !isset($e['d']) || $e['d'] > $limite; 
-});
+$raggioMax = 150; $limiteVuoti = 10; $contatoreVuoti = 0;
+for ($r = 0; $r <= $raggioMax; $r++) {
+    $trovatoNuovo = false;
+    $xMin = $centerX - $r; $xMax = $centerX + $r;
+    $yMin = $centerY - $r; $yMax = $centerY + $r;
+    $punti = [];
+    for ($i = $xMin; $i <= $xMax; $i++) { $punti[] = [$i, $yMin]; $punti[] = [$i, $yMax]; }
+    for ($j = $yMin + 1; $j < $yMax; $j++) { $punti[] = [$xMin, $j]; $punti[] = [$xMax, $j]; }
+    foreach ($punti as $p) {
+        if (isset($puntiCaldi[$p[0] . "_" . $p[1]])) continue;
+        if (processTile($p[0], $p[1], $serverID, $tempMap, $backendURL)) $trovatoNuovo = true;
+    }
+    if ($trovatoNuovo) $contatoreVuoti = 0; else $contatoreVuoti++;
+    if ($contatoreVuoti >= $limiteVuoti) break;
+}
 
+// Pulizia (72h) e salvataggio locale
+$limite = time() - (72 * 3600);
+$mappaPulita = array_filter($tempMap, function($e) use ($limite) { return !isset($e['d']) || $e['d'] > $limite; });
 file_put_contents($fileDatabase, json_encode(array_values($mappaPulita), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-echo "Scansione terminata. Dati salvati in $fileDatabase\n";
+echo "Fine. Database locale aggiornato.\n";
 
 function processTile($x, $y, $sid, &$tmp, $bk) {
     $url = "$bk/maps/$sid/{$x}_{$y}.jtile";
-    $content = @file_get_contents($url);
-    if (!$content || $content === 'callback_politicalmap({})') return false;
-    if (preg_match('/\((.*)\)/s', $content, $matches)) {
-        $json = json_decode($matches[1], true);
-        if (isset($json['habitatArray'])) {
-            foreach ($json['habitatArray'] as $h) {
-                $key = $h['mapx'] . "_" . $h['mapy'];
-                $tmp[$key] = [
-                    'p' => (int)$h['playerid'],
-                    'a' => (int)$h['allianceid'],
-                    'n' => $h['name'],
-                    'x' => (int)$h['mapx'],
-                    'y' => (int)$h['mapy'],
-                    'pt'=> (int)$h['points'],
-                    't' => (int)$h['type'],
-                    'd' => time()
-                ];
+    $c = @file_get_contents($url);
+    if (!$c || $c === 'callback_politicalmap({})') return false; 
+    if (preg_match('/\((.*)\)/s', $c, $m)) {
+        $j = json_decode($m[1], true);
+        if (isset($j['habitatArray'])) {
+            foreach ($j['habitatArray'] as $h) {
+                $tmp[$h['mapx']."_".$h['mapy']] = ['p'=>(int)$h['playerid'],'a'=>(int)$h['allianceid'],'n'=>$h['name']??'','x'=>(int)$h['mapx'],'y'=>(int)$h['mapy'],'pt'=>(int)$h['points'],'t'=>(int)$h['habitattype'],'d'=>time()];
             }
             return true;
         }
