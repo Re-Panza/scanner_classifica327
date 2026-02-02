@@ -21,7 +21,6 @@ jobs:
           php-version: '8.1'
 
       - name: Esecuzione Scanner
-        # Lo scanner usa mondo_327.json locale se presente per la memoria
         run: php scanner.php 
 
       - name: Setup Node.js
@@ -33,35 +32,32 @@ jobs:
         env:
           MY_PAT: ${{ secrets.PAT_GITHUB }}
         run: |
-          # 1. Configurazione Git per il bot
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
 
-          # 2. Cloniamo lk_database (dove risiede update_history.js)
+          # 1. Cloniamo la repo target
           git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
           
-          # 3. Copiamo il file scansionato nella repo database
+          # 2. Copiamo i file generati
           cp mondo_327.json target_repo/mondo_327.json
           
-          # 4. Entriamo nella repo database ed eseguiamo lo script
-          # Questo risolve l'errore MODULE_NOT_FOUND visto in precedenza
+          # 3. Entriamo ed eseguiamo lo script Node
           cd target_repo
           node update_history.js mondo_327.json
           
-          # 5. Riportiamo i file generati nella cartella dello scanner per il push locale
+          # 4. Copiamo i file per la memoria locale dello scanner
           cp inattivi_327.json ../inattivi_327.json
           cp db_327.json ../db_327.json
           
-          # 6. Push dei dati sulla repo lk_database [Risolve errore 128]
+          # 5. AGGIORNAMENTO REMOTO (Il punto critico dell'errore 128)
           git add mondo_327.json db_327.json inattivi_327.json
-          git commit -m "🤖 Update Mondo 327 via Scanner: $(date)" || exit 0
+          git commit -m "🤖 Update Mondo 327: $(date)" || exit 0
           
-          # Forziamo l'uso del Token nell'URL per l'autenticazione corretta
+          # RISOLUZIONE: Forziamo il token direttamente nel push
           git push https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git main
 
       - name: Salva Risultati in Re Panza Brain (Memoria Locale)
         run: |
-          # Salviamo i file anche qui così la prossima scansione non parte da 0 quadranti
           git add mondo_327.json inattivi_327.json db_327.json
           git commit -m "🤖 Memoria locale aggiornata: $(date)" || echo "Nessuna modifica"
           git push
