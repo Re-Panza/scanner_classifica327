@@ -21,7 +21,7 @@ jobs:
           php-version: '8.1'
 
       - name: Esecuzione Scanner
-        # Lo scanner genera mondo_327.json localmente
+        # Lo scanner usa il file locale mondo_327.json se esiste
         run: php scanner.php 
 
       - name: Setup Node.js
@@ -40,26 +40,26 @@ jobs:
           # 2. Cloniamo lk_database (dove si trova update_history.js)
           git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
           
-          # 3. Copiamo il file scansionato nella cartella della repo database
+          # 3. Copiamo il file scansionato nella repo database
           cp mondo_327.json target_repo/mondo_327.json
           
-          # 4. ENTRA NELLA CARTELLA target_repo PER LANCIARE LO SCRIPT
-          # Questo risolve l'errore MODULE_NOT_FOUND perché lo script è lì
+          # 4. Entriamo nella repo database ed eseguiamo lo script
           cd target_repo
           node update_history.js mondo_327.json
           
-          # 5. Riportiamo i file generati (inattivi e db) nella cartella principale per il push locale
+          # 5. Riportiamo i file generati nella cartella principale per il push locale
           cp inattivi_327.json ../inattivi_327.json
           cp db_327.json ../db_327.json
           
-          # 6. Push dei dati aggiornati sulla repo lk_database
+          # 6. Push dei dati sulla repo lk_database [Risolve errore 128]
           git add mondo_327.json db_327.json inattivi_327.json
-          git commit -m "🤖 Update Mondo 327 via Scanner: $(date)" || exit 0
-          git push origin main
+          git commit -m "🤖 Update Mondo 327: $(date)" || exit 0
+          # Usiamo l'URL completo con il token per il push sicuro
+          git push https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git main
 
       - name: Salva Risultati in Re Panza Brain (Memoria Locale)
         run: |
-          # Salviamo mondo_327.json anche qui così la prossima scansione è veloce
+          # Salviamo i risultati anche qui per la prossima scansione veloce
           git add mondo_327.json inattivi_327.json db_327.json
-          git commit -m "🤖 Aggiornamento memoria locale: $(date)" || echo "Nessuna modifica"
+          git commit -m "🤖 Memoria locale aggiornata: $(date)" || echo "Nessuna modifica"
           git push
