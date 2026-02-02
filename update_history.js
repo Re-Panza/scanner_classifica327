@@ -1,84 +1,77 @@
 const fs = require('fs');
 
-const inputFile = process.argv[2]; 
-// Estrae il numero del mondo dal file di input (es. 327 o 337)
+const inputFile = process.argv[2]; // mondo_327.json
 const mondoMatch = inputFile ? inputFile.match(/\d+/) : null;
 const mondoNum = mondoMatch ? mondoMatch[0] : 'unknown';
 
-// NUOVI NOMI FILE RICHIESTI
-const FILE_DB = `database_mondocompleto${mondoNum}.json`;
-const FILE_INATTIVI = `database_soloinattivi${mondoNum}.json`;
+// Useremo un solo file per tutto [cite: 2026-02-02]
+const FILE_UNICO = `database_mondo_${mondoNum}.json`;
 
 try {
     const scanData = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
-    let db = {};
-    if (fs.existsSync(FILE_DB)) {
-        db = JSON.parse(fs.readFileSync(FILE_DB, 'utf8'));
+    let dbStorico = {};
+
+    // Carichiamo lo storico se esiste (per il confronto delle 24h)
+    if (fs.existsSync(FILE_UNICO)) {
+        const vecchioDB = JSON.parse(fs.readFileSync(FILE_UNICO, 'utf8'));
+        // Trasformiamo l'array in un oggetto indicizzato per ID giocatore per il confronto
+        vecchioDB.forEach(h => {
+            if (!dbStorico[h.p]) dbStorico[h.p] = { u: h.u, i: h.i, f: h.f || {} };
+        });
     }
 
     const now = new Date();
-    const currentStatus = {};
-
-    // 1. Mappiamo i dati attuali usando l'ID giocatore 'p'
+    
+    // Mappiamo lo stato attuale dei castelli
+    const playerStatus = {};
     scanData.forEach(h => {
-        const pid = h.p; 
-        if (!pid || pid === 0) return;
-        if (!currentStatus[pid]) currentStatus[pid] = { nome: h.n, castelli: {} };
-        
-        // Firma univoca del castello (nome|punti)
-        currentStatus[pid].castelli[`${h.x}_${h.y}`] = `${h.n}|${h.pt}`;
+        if (!h.p || h.p === 0) return;
+        if (!playerStatus[h.p]) playerStatus[h.p] = { n: h.n, castelli: {} };
+        playerStatus[h.p].castelli[`${h.x}_${h.y}`] = `${h.n}|${h.pt}`;
     });
 
-    Object.keys(currentStatus).forEach(pid => {
-        const player = currentStatus[pid];
-        
-        if (!db[pid]) {
-            db[pid] = {
-                nome: player.nome,
-                ultima_modifica: now.toISOString(),
-                inattivo: false,
-                firme_castelli: player.castelli 
-            };
-        } else {
-            let haCambiatoQualcosa = false;
-            
-            // Confronto dei castelli per rilevare attività
-            for (const [coord, firmaAttuale] of Object.entries(player.castelli)) {
-                const firmaPrecedente = db[pid].firme_castelli ? db[pid].firme_castelli[coord] : null;
-                
-                if (firmaPrecedente !== firmaAttuale) {
-                    haCambiatoQualcosa = true;
-                    break;
-                }
-            }
+    // Aggiorniamo i dati della scansione con le info di inattività
+    const finalData = scanData.map(h => {
+        if (!h.p || h.p === 0) return h;
 
-            if (haCambiatoQualcosa) {
-                db[pid].ultima_modifica = now.toISOString();
-                db[pid].inattivo = false;
-                db[pid].firme_castelli = player.castelli;
-                db[pid].nome = player.nome;
-            } else {
-                // Calcolo inattività dopo 24 ore senza modifiche
-                const orePassate = (now - new Date(db[pid].ultima_modifica)) / (1000 * 60 * 60);
-                if (orePassate >= 24) db[pid].inattivo = true;
-                
-                db[pid].firme_castelli = player.castelli;
+        const pID = h.p;
+        const storico = dbStorico[pID];
+        const attuale = playerStatus[pID];
+        
+        let ultimaModifica = storico ? storico.u : now.toISOString();
+        let inattivo = storico ? storico.i : false;
+        let firmeVecchie = storico ? storico.f : {};
+
+        // Confronto firme castelli
+        let cambiato = false;
+        for (const [coord, firma] of Object.entries(attuale.castelli)) {
+            if (firmeVecchie[coord] !== firma) {
+                cambiato = true;
+                break;
             }
         }
+
+        if (cambiato) {
+            ultimaModifica = now.toISOString();
+            inattivo = false;
+        } else if (storico) {
+            const ore = (now - new Date(storico.u)) / (1000 * 60 * 60);
+            if (ore >= 24) inattivo = true;
+        }
+
+        // Ritorniamo l'habitat arricchito
+        return {
+            ...h,
+            u: ultimaModifica, // Ultima modifica
+            i: inattivo,       // Inattivo (true/false)
+            f: attuale.castelli // Firme per il prossimo giro
+        };
     });
 
-    // 2. Generazione Lista Inattivi "database_soloinattivi"
-    const listaInattivi = Object.keys(db)
-        .filter(pid => db[pid].inattivo === true)
-        .map(pid => ({ id: pid, nome: db[pid].nome, dal: db[pid].ultima_modifica }));
-
-    // Salvataggio con i nuovi nomi
-    fs.writeFileSync(FILE_DB, JSON.stringify(db, null, 2));
-    fs.writeFileSync(FILE_INATTIVI, JSON.stringify(listaInattivi, null, 2));
+    fs.writeFileSync(FILE_UNICO, JSON.stringify(finalData, null, 2));
     
-    console.log(`✅ Elaborazione completata.`);
-    console.log(`📁 Database Completo: ${FILE_DB}`);
-    console.log(`📁 Solo Inattivi: ${FILE_INATTIVI} (${listaInattivi.length} record)`);
+    console.log(`✅ Database Unificato creato: ${FILE_UNICO}`);
+    console.log(`📊 Totale habitat: ${finalData.length}`);
 } catch (e) {
     console.error("Errore:", e.message);
 }
