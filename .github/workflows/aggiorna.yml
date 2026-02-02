@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Necessario per salvare i file nella repo dello scanner
+      contents: write
 
     steps:
       - name: Checkout Codice Scanner (Re Panza Brain)
@@ -21,7 +21,7 @@ jobs:
           php-version: '8.1'
 
       - name: Esecuzione Scanner
-        # Genera mondo_327.json localmente
+        # Lo scanner genera mondo_327.json localmente
         run: php scanner.php 
 
       - name: Setup Node.js
@@ -29,36 +29,37 @@ jobs:
         with:
           node-version: '16'
 
-      - name: Elaborazione Storico e Inattivi
-        # Eseguiamo lo script Node qui per generare db_327.json e inattivi_327.json localmente
-        # (Assicurati che update_history.js sia presente anche in questa repo)
-        run: node update_history.js mondo_327.json
-
-      - name: Salva Risultati in Re Panza Brain (Memoria Locale)
-        run: |
-          git config --global user.name "Re Panza Bot"
-          git config --global user.email "bot@repanza.it"
-          git add mondo_327.json inattivi_327.json db_327.json
-          git commit -m "🤖 Memoria locale aggiornata: $(date)" || echo "Nessuna modifica"
-          git push
-
-      - name: Consegna Dati a lk_database
+      - name: Elaborazione Dati e Consegna a lk_database
         env:
           MY_PAT: ${{ secrets.PAT_GITHUB }}
         run: |
-          # 1. Clona la repository lk_database
-          git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
-          
-          # 2. Copia tutti i file aggiornati nella repo target
-          cp mondo_327.json target_repo/mondo_327.json
-          cp db_327.json target_repo/db_327.json
-          cp inattivi_327.json target_repo/inattivi_327.json
-          
-          cd target_repo
-          
-          # 3. Push finale alla repo lk_database
+          # 1. Configurazione Git
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
-          git add .
-          git commit -m "🤖 Update Mondo 327 da Re Panza Brain: $(date)" || exit 0
+
+          # 2. Cloniamo lk_database (dove si trova update_history.js)
+          git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
+          
+          # 3. Copiamo il file scansionato nella cartella della repo database
+          cp mondo_327.json target_repo/mondo_327.json
+          
+          # 4. ENTRA NELLA CARTELLA target_repo PER LANCIARE LO SCRIPT
+          # Questo risolve l'errore MODULE_NOT_FOUND perché lo script è lì
+          cd target_repo
+          node update_history.js mondo_327.json
+          
+          # 5. Riportiamo i file generati (inattivi e db) nella cartella principale per il push locale
+          cp inattivi_327.json ../inattivi_327.json
+          cp db_327.json ../db_327.json
+          
+          # 6. Push dei dati aggiornati sulla repo lk_database
+          git add mondo_327.json db_327.json inattivi_327.json
+          git commit -m "🤖 Update Mondo 327 via Scanner: $(date)" || exit 0
           git push origin main
+
+      - name: Salva Risultati in Re Panza Brain (Memoria Locale)
+        run: |
+          # Salviamo mondo_327.json anche qui così la prossima scansione è veloce
+          git add mondo_327.json inattivi_327.json db_327.json
+          git commit -m "🤖 Aggiornamento memoria locale: $(date)" || echo "Nessuna modifica"
+          git push
