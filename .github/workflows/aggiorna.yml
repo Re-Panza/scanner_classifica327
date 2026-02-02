@@ -8,20 +8,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+
     steps:
       - name: Accedi al repository Scanner
         uses: actions/checkout@v3
-
-      - name: Recupera Dati da lk_database
-        env:
-          MY_PAT: ${{ secrets.PAT_GITHUB }}
-        run: |
-          # Scarica il file per dare la memoria allo scanner
-          curl -H "Authorization: token $MY_PAT" \
-               -H "Accept: application/vnd.github.v3.raw" \
-               -L "https://api.github.com/repos/Re-Panza/lk_database/contents/mondo_327.json" \
-               -o mondo_327.json || echo "Inizio da zero"
 
       - name: Configura PHP
         uses: shivammathur/setup-php@v2
@@ -29,23 +21,38 @@ jobs:
           php-version: '8.1'
 
       - name: Esegui lo script di scansione
+        # Utilizza il mondo_327.json locale per la memoria
         run: php scanner.php 
+
+      - name: Aggiorna Memoria Locale (lk_scanner)
+        # Salva il file aggiornato qui per la prossima esecuzione veloce
+        run: |
+          git config --global user.name "Re Panza Bot"
+          git config --global user.email "bot@repanza.it"
+          git add mondo_327.json
+          git commit -m "🤖 Memoria scanner aggiornata: $(date)" || echo "Nessuna modifica"
+          git push
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '16'
 
-      - name: Consegna a lk_database
+      - name: Copia e Aggiorna su lk_database
         env:
           MY_PAT: ${{ secrets.PAT_GITHUB }}
         run: |
-          git config --global user.name "Re Panza Bot"
-          git config --global user.email "bot@repanza.it"
+          # 1. Clona la repo lk_database
           git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
+          
+          # 2. Copia il file appena creato dallo scanner nella repo target
           cp mondo_327.json target_repo/mondo_327.json
+          
+          # 3. Entra e aggiorna storico/inattivi (centralizzato in Re Panza Brain)
           cd target_repo
           node update_history.js mondo_327.json
+          
+          # 4. Push finale alla repo database
           git add mondo_327.json db_327.json inattivi_327.json
-          git commit -m "🤖 Update Mondo 327: $(date)" || exit 0
+          git commit -m "🤖 Database aggiornato da scanner: $(date)" || exit 0
           git push origin main
