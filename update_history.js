@@ -1,11 +1,13 @@
 const fs = require('fs');
 
 const inputFile = process.argv[2]; 
-// La regex \d+ estrae "337" da "mondo_337.json"
+// Estrae il numero del mondo dal file di input (es. 327 o 337)
 const mondoMatch = inputFile ? inputFile.match(/\d+/) : null;
 const mondoNum = mondoMatch ? mondoMatch[0] : 'unknown';
-const FILE_DB = `db_${mondoNum}.json`;
-const FILE_INATTIVI = `inattivi_${mondoNum}.json`;
+
+// NUOVI NOMI FILE RICHIESTI
+const FILE_DB = `database_mondocompleto${mondoNum}.json`;
+const FILE_INATTIVI = `database_soloinattivi${mondoNum}.json`;
 
 try {
     const scanData = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
@@ -23,7 +25,7 @@ try {
         if (!pid || pid === 0) return;
         if (!currentStatus[pid]) currentStatus[pid] = { nome: h.n, castelli: {} };
         
-        // Identificazione univoca del castello tramite coordinate
+        // Firma univoca del castello (nome|punti)
         currentStatus[pid].castelli[`${h.x}_${h.y}`] = `${h.n}|${h.pt}`;
     });
 
@@ -40,15 +42,11 @@ try {
         } else {
             let haCambiatoQualcosa = false;
             
+            // Confronto dei castelli per rilevare attività
             for (const [coord, firmaAttuale] of Object.entries(player.castelli)) {
                 const firmaPrecedente = db[pid].firme_castelli ? db[pid].firme_castelli[coord] : null;
                 
-                // Controllo cambiamenti o nuove conquiste
-                if (firmaPrecedente && firmaPrecedente !== firmaAttuale) {
-                    haCambiatoQualcosa = true;
-                    break;
-                }
-                if (!firmaPrecedente) {
+                if (firmaPrecedente !== firmaAttuale) {
                     haCambiatoQualcosa = true;
                     break;
                 }
@@ -69,16 +67,18 @@ try {
         }
     });
 
-    // 2. Generazione Lista Inattivi Dinamica
+    // 2. Generazione Lista Inattivi "database_soloinattivi"
     const listaInattivi = Object.keys(db)
         .filter(pid => db[pid].inattivo === true)
         .map(pid => ({ id: pid, nome: db[pid].nome, dal: db[pid].ultima_modifica }));
 
-    // Salvataggio dei file nella cartella corrente della repo lk_database
+    // Salvataggio con i nuovi nomi
     fs.writeFileSync(FILE_DB, JSON.stringify(db, null, 2));
     fs.writeFileSync(FILE_INATTIVI, JSON.stringify(listaInattivi, null, 2));
     
-    console.log(`✅ Elaborazione completata. Inattivi: ${listaInattivi.length}`);
+    console.log(`✅ Elaborazione completata.`);
+    console.log(`📁 Database Completo: ${FILE_DB}`);
+    console.log(`📁 Solo Inattivi: ${FILE_INATTIVI} (${listaInattivi.length} record)`);
 } catch (e) {
     console.error("Errore:", e.message);
 }
