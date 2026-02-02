@@ -42,7 +42,7 @@ jobs:
           git config --global user.email "bot@repanza.it"
           
           # Aggiunge i file generati (mappa, database e inattivi)
-          git add mondo_327.json db_327.json inattivi_327.json
+          git add mondo_327.json database_mondocompleto327.json database_soloinattivi327.json
           
           # Esegue il commit e il push direttamente nella repo attuale
           git commit -m "🤖 Update Mondo 327: $(date)" || echo "Nessuna modifica"
