@@ -1,15 +1,41 @@
-- name: Elaborazione Inattivi e Storico
-        run: |
-          # Passiamo il file generato dallo scanner allo script
-          node update_history.js database_mondo_327.json
+name: Scan Mondo 327 Unificato
+
+on:
+  schedule:
+    - cron: '30 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Codice
+        uses: actions/checkout@v3
+
+      - name: Setup PHP e Node.js
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+
+      - name: Esecuzione Scanner
+        # Lo scanner crea mondo_327.json
+        run: php scanner.php 
+
+      - name: Elaborazione Database Unico
+        # Lo script Node unisce i dati in database_mondo_327.json
+        run: node update_history.js mondo_327.json
 
       - name: Salva Risultati nella Repo
         run: |
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
           
-          # AGGIUNGIAMO SOLO IL FILE UNICO [cite: 2026-02-02]
+          # Aggiunge solo il nuovo file unificato e rimuove quelli vecchi se presenti
           git add database_mondo_327.json
+          git rm -f database_mondocompleto327.json database_soloinattivi327.json mondo_327.json db_327.json || echo "Vecchi file già rimossi"
           
           git commit -m "🤖 Update Database Unificato: $(date)" || echo "Nessuna modifica"
           git push
