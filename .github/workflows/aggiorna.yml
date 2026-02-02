@@ -2,7 +2,7 @@ name: Scanner L&K Automatico (Mondo 327)
 
 on:
   schedule:
-    - cron: '30 */2 * * *' 
+    - cron: '30 */2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout Repo Scanner
+      - name: Accedi al repository Scanner
         uses: actions/checkout@v3
 
       - name: Configura PHP
@@ -18,33 +18,44 @@ jobs:
         with:
           php-version: '8.1'
 
-      - name: Esecuzione Scanner
-        run: php scanner.php # Genera mondo_327.json locale
+      - name: Recupera Database Esistente
+        env:
+          MY_PAT: ${{ secrets.PAT_GITHUB }}
+        run: |
+          # Scarichiamo il file mondo_327.json per dare la "memoria" allo scanner
+          curl -H "Authorization: token $MY_PAT" \
+               -H "Accept: application/vnd.github.v3.raw" \
+               -L https://raw.githubusercontent.com/Re-Panza/lk_database/main/mondo_327.json \
+               -o mondo_327.json || echo "File non trovato, inizierà scansione vuota"
+
+      - name: Esegui lo script di scansione
+        # Ora lo scanner troverà mondo_327.json e sarà veloce
+        run: php scanner.php 
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '16'
 
-      - name: Spostamento Dati su lk_database
+      - name: Consegna Dati a lk_database
         env:
           MY_PAT: ${{ secrets.PAT_GITHUB }}
         run: |
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
 
-          # 1. Clona la repo dei database (lk_database)
+          # 1. Clona la repo lk_database
           git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
           
-          # 2. Copia il file prodotto dallo scanner nella repo database
+          # 2. Copia il file aggiornato
           cp mondo_327.json target_repo/mondo_327.json
           
           cd target_repo
           
-          # 3. Esegue la logica dello storico (che deve stare in lk_database)
+          # 3. Aggiorna storico e inattivi usando lo script che è già in lk_database
           node update_history.js mondo_327.json
           
-          # 4. Push dei file aggiornati nella repo database
+          # 4. Push finale
           git add mondo_327.json db_327.json inattivi_327.json
-          git commit -m "🤖 Update Mondo 327 via Scanner Repo: $(date)" || exit 0
+          git commit -m "🤖 Update Mondo 327: $(date)" || exit 0
           git push origin main
