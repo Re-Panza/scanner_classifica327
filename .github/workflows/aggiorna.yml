@@ -2,8 +2,8 @@ name: Scan Mondo 327 Unificato
 
 on:
   schedule:
-    - cron: '30 */2 * * *'
-  workflow_dispatch:
+    - cron: '30 */2 * * *' # Gira ogni 2 ore al minuto 30
+  workflow_dispatch:      # Permette l'avvio manuale
 
 jobs:
   build:
@@ -15,27 +15,35 @@ jobs:
       - name: Checkout Codice
         uses: actions/checkout@v3
 
-      - name: Setup PHP e Node.js
+      - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
 
-      - name: Esecuzione Scanner
-        # Lo scanner crea mondo_327.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: 1. Esecuzione Scanner (Genera dati grezzi)
+        # Questo comando genera il file temporaneo mondo_327.json
         run: php scanner.php 
 
-      - name: Elaborazione Database Unico
-        # Lo script Node unisce i dati in database_mondo_327.json
+      - name: 2. Elaborazione Database Unico (Aggiunge Inattività)
+        # Questo comando prende mondo_327.json e lo trasforma in database_mondo_327.json con i campi u, i, f
         run: node update_history.js mondo_327.json
 
-      - name: Salva Risultati nella Repo
+      - name: 3. Salva Risultati nella Repo
         run: |
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
           
-          # Aggiunge solo il nuovo file unificato e rimuove quelli vecchi se presenti
+          # Aggiungiamo il file finale unificato
           git add database_mondo_327.json
-          git rm -f database_mondocompleto327.json database_soloinattivi327.json mondo_327.json db_327.json || echo "Vecchi file già rimossi"
           
-          git commit -m "🤖 Update Database Unificato: $(date)" || echo "Nessuna modifica"
+          # Pulizia: rimuoviamo i vecchi file se esistono ancora per evitare confusione
+          git rm -f mondo_327.json db_327.json database_mondocompleto327.json database_soloinattivi327.json inattivi_327.json || echo "File vecchi già rimossi"
+          
+          # Commit e Push
+          git commit -m "🤖 Update Database Unificato: $(date)" || echo "Nessuna modifica rilevata"
           git push
