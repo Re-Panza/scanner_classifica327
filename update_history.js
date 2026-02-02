@@ -1,41 +1,52 @@
 const fs = require('fs');
-const FILE_UNICO = 'database_mondo_327.json'; // Questo DEVE essere il nome finale
+
+// USIAMO SOLO QUESTO FILE PER TUTTO
+const FILE = 'database_mondo_327.json';
 
 try {
-    // Legge il file prodotto dallo scanner (passato come argomento)
-    const scanData = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-    let dbStorico = {};
-
-    if (fs.existsSync(FILE_UNICO)) {
-        const vecchioDB = JSON.parse(fs.readFileSync(FILE_UNICO, 'utf8'));
-        vecchioDB.forEach(h => {
-            if (h.p) dbStorico[`${h.p}_${h.x}_${h.y}`] = { u: h.u, i: h.i, f: h.f };
-        });
+    if (!fs.existsSync(FILE)) {
+        console.error(`❌ Errore: Il file ${FILE} non esiste!`);
+        process.exit(1);
     }
 
+    const data = JSON.parse(fs.readFileSync(FILE, 'utf8'));
     const now = new Date();
-    const finalData = scanData.map(h => {
-        if (!h.p || h.p === 0) return h;
-        const key = `${h.p}_${h.x}_${h.y}`;
+    
+    // Creiamo una mappa dello stato attuale per confrontare i cambiamenti
+    // Usiamo una firma: "nome|punti"
+    const finalData = data.map(h => {
+        if (!h.p || h.p === 0) return h; // Salta castelli vuoti
+
         const firmaAttuale = `${h.n}|${h.pt}`;
-        const storico = dbStorico[key];
-
-        let ultimaModifica = storico ? storico.u : now.toISOString();
-        let inattivo = storico ? storico.i : false;
-
-        if (storico && firmaAttuale !== storico.f) {
-            ultimaModifica = now.toISOString();
-            inattivo = false;
-        } else if (storico) {
-            const ore = (now - new Date(storico.u)) / (1000 * 60 * 60);
-            if (ore >= 24) inattivo = true;
+        
+        // Se è la prima volta che vede questo castello con il nuovo sistema
+        if (!h.u) {
+            h.u = now.toISOString(); // ultima modifica
+            h.i = false;             // inattivo
+            h.f = firmaAttuale;      // firma
+            return h;
         }
 
-        return { ...h, u: ultimaModifica, i: inattivo, f: firmaAttuale };
+        // CONFRONTO: Se la firma è cambiata (punti o nome)
+        if (h.f !== firmaAttuale) {
+            h.u = now.toISOString();
+            h.i = false;
+            h.f = firmaAttuale;
+        } else {
+            // Se la firma è identica, controlliamo se sono passate 24 ore
+            const orePassate = (now - new Date(h.u)) / (1000 * 60 * 60);
+            if (orePassate >= 24) {
+                h.i = true;
+            }
+        }
+
+        return h;
     });
 
-    fs.writeFileSync(FILE_UNICO, JSON.stringify(finalData, null, 2));
-    console.log("✅ Elaborazione completata con successo!");
+    fs.writeFileSync(FILE, JSON.stringify(finalData, null, 2));
+    console.log(`✅ Database ${FILE} aggiornato con dati inattività.`);
+
 } catch (e) {
     console.error("Errore:", e.message);
+    process.exit(1);
 }
