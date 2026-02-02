@@ -18,18 +18,19 @@ jobs:
         with:
           php-version: '8.1'
 
-      - name: Recupera Database Esistente
+      - name: Recupera Database Esistente da lk_database
         env:
           MY_PAT: ${{ secrets.PAT_GITHUB }}
         run: |
-          # Scarichiamo il file mondo_327.json per dare la "memoria" allo scanner
+          # Scarichiamo il file per dare la "memoria" allo scanner
+          # Usiamo l'URL Raw della repo lk_database
           curl -H "Authorization: token $MY_PAT" \
                -H "Accept: application/vnd.github.v3.raw" \
                -L https://raw.githubusercontent.com/Re-Panza/lk_database/main/mondo_327.json \
                -o mondo_327.json || echo "File non trovato, inizierà scansione vuota"
 
       - name: Esegui lo script di scansione
-        # Ora lo scanner troverà mondo_327.json e sarà veloce
+        # Ora lo scanner troverà mondo_327.json scaricato sopra e sarà veloce
         run: php scanner.php 
 
       - name: Setup Node.js
@@ -44,18 +45,18 @@ jobs:
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
 
-          # 1. Clona la repo lk_database
+          # 1. Clona la repo lk_database dove risiede la logica dello storico
           git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
           
-          # 2. Copia il file aggiornato
+          # 2. Copia il nuovo file scansionato nella repo target
           cp mondo_327.json target_repo/mondo_327.json
           
           cd target_repo
           
-          # 3. Aggiorna storico e inattivi usando lo script che è già in lk_database
+          # 3. Esegui update_history.js (che deve stare dentro lk_database)
           node update_history.js mondo_327.json
           
-          # 4. Push finale
+          # 4. Push dei file aggiornati (mondo, db e inattivi)
           git add mondo_327.json db_327.json inattivi_327.json
           git commit -m "🤖 Update Mondo 327: $(date)" || exit 0
           git push origin main
