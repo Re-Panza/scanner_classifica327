@@ -1,20 +1,64 @@
-- name: Elaborazione Dati e Consegna a lk_database
+name: Scan Mondo 327 e Consegna a lk_database
+
+on:
+  schedule:
+    - cron: '30 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Codice Scanner (Re Panza Brain)
+        uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+
+      - name: Esecuzione Scanner
+        # Carica mondo_327.json se esiste per evitare "0 quadranti"
+        run: php scanner.php 
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Elaborazione Dati e Consegna a lk_database
         env:
           MY_PAT: ${{ secrets.PAT_GITHUB }}
         run: |
+          # 1. Configurazione Git
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
 
-          # Clone della repo target
+          # 2. Cloniamo lk_database
           git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
           
+          # 3. Copiamo il file scansionato nella repo target
           cp mondo_327.json target_repo/mondo_327.json
-          cd target_repo
           
-          # Esecuzione script di elaborazione
+          # 4. Entriamo ed eseguiamo lo script
+          cd target_repo
           node update_history.js mondo_327.json
           
-          # Push con autenticazione esplicita per evitare errore 128
-          git add .
+          # 5. Riportiamo i file generati fuori per il salvataggio locale
+          cp inattivi_327.json ../inattivi_327.json
+          cp db_327.json ../db_327.json
+          
+          # 6. Push dei dati sulla repo lk_database [Risolve errore 128]
+          git add mondo_327.json db_327.json inattivi_327.json
           git commit -m "🤖 Update Mondo 327: $(date)" || exit 0
           git push https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git main
+
+      - name: Salva Memoria Locale (Re Panza Brain)
+        run: |
+          # Salviamo i file qui per non ripartire da zero la prossima volta
+          git add mondo_327.json inattivi_327.json db_327.json
+          git commit -m "🤖 Memoria locale aggiornata: $(date)" || echo "Nessuna modifica"
+          git push
