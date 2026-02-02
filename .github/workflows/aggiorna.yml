@@ -1,67 +1,20 @@
-name: Scan Mondo 327 e Consegna a lk_database
-
-on:
-  schedule:
-    - cron: '30 */2 * * *'
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout Codice Scanner (Re Panza Brain)
-        uses: actions/checkout@v3
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.1'
-
-      - name: Esecuzione Scanner
-        run: php scanner.php 
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
-
-      - name: Elaborazione Dati e Consegna a lk_database
+- name: Elaborazione Dati e Consegna a lk_database
         env:
           MY_PAT: ${{ secrets.PAT_GITHUB }}
         run: |
-          # 1. Configurazione Git globale
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
 
-          # 2. Cloniamo la repo lk_database
+          # Clone della repo target
           git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
           
-          # 3. Copiamo il file generato dallo scanner
           cp mondo_327.json target_repo/mondo_327.json
-          
-          # 4. Entriamo nella cartella target per elaborare i dati
           cd target_repo
           
-          # SETTAGGIO CRUCIALE: Riconfiguriamo l'URL remoto per includere il PAT per il push
-          git remote set-url origin https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git
-          
-          # 5. Eseguiamo lo script Node
+          # Esecuzione script di elaborazione
           node update_history.js mondo_327.json
           
-          # 6. Push dei dati su lk_database [Risolve errore 128]
-          git add mondo_327.json db_327.json inattivi_327.json
+          # Push con autenticazione esplicita per evitare errore 128
+          git add .
           git commit -m "🤖 Update Mondo 327: $(date)" || exit 0
-          git push origin main
-
-      - name: Salva Memoria Locale (nella repo dello Scanner)
-        run: |
-          # Salviamo i file anche qui per la prossima scansione veloce
-          # Nota: Copiamo i file generati nella cartella target_repo di nuovo fuori prima di pushare
-          cp target_repo/inattivi_327.json inattivi_327.json
-          cp target_repo/db_327.json db_327.json
-          git add mondo_327.json inattivi_327.json db_327.json
-          git commit -m "🤖 Memoria locale aggiornata: $(date)" || echo "Nessuna modifica"
-          git push
+          git push https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git main
