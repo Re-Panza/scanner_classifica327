@@ -1,49 +1,15 @@
-name: Scan Mondo 327 (Tutto in Uno)
-
-on:
-  schedule:
-    - cron: '30 */2 * * *'
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout Codice Scanner
-        uses: actions/checkout@v3
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.1'
-
-      - name: Esecuzione Scanner
-        # Esegue lo scanner che genera mondo_327.json
-        run: php scanner.php 
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
-
-      - name: Elaborazione Inattivi e Storico
+- name: Elaborazione Inattivi e Storico
         run: |
-          # Node ora trova lo script perché lo hai COPIATO nella repo dello scanner
-          # Questo risolve l'errore MODULE_NOT_FOUND
-          node update_history.js mondo_327.json
+          # Passiamo il file generato dallo scanner allo script
+          node update_history.js database_mondo_327.json
 
       - name: Salva Risultati nella Repo
         run: |
-          # Configurazione Git locale per salvare i dati
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
           
-          # Aggiunge i file generati (mappa, database e inattivi)
-          git add mondo_327.json database_mondocompleto327.json database_soloinattivi327.json
+          # AGGIUNGIAMO SOLO IL FILE UNICO [cite: 2026-02-02]
+          git add database_mondo_327.json
           
-          # Esegue il commit e il push direttamente nella repo attuale
-          git commit -m "🤖 Update Mondo 327: $(date)" || echo "Nessuna modifica"
+          git commit -m "🤖 Update Database Unificato: $(date)" || echo "Nessuna modifica"
           git push
