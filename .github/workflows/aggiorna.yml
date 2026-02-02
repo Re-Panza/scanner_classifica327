@@ -1,4 +1,4 @@
-name: Scanner Mondo 327 (Richiamo Script Esterno)
+name: Scan Mondo 327 (Tutto in Uno)
 
 on:
   schedule:
@@ -12,52 +12,38 @@ jobs:
       contents: write
 
     steps:
-      - name: Accedi alla Repository Scanner
+      - name: Checkout Codice Scanner
         uses: actions/checkout@v3
 
-      - name: Setup PHP e Node.js
+      - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
 
       - name: Esecuzione Scanner
+        # Esegue lo scanner che genera mondo_327.json
         run: php scanner.php 
 
-      - name: Scarica update_history.js dalla Repo Database
-        env:
-          MY_PAT: ${{ secrets.PAT_GITHUB }}
-        run: |
-          # Scarichiamo il file JS direttamente dalla repository lk_database usando il tuo Token
-          curl -H "Authorization: token $MY_PAT" \
-               -H "Accept: application/vnd.github.v3.raw" \
-               -L "https://api.github.com/repos/Re-Panza/lk_database/contents/update_history.js" \
-               -o update_history.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
 
-      - name: Elaborazione Dati
+      - name: Elaborazione Inattivi e Storico
         run: |
-          # Ora che il file è stato scaricato, Node lo trova ed esegue l'elaborazione
+          # Node ora trova lo script perché lo hai COPIATO nella repo dello scanner
+          # Questo risolve l'errore MODULE_NOT_FOUND
           node update_history.js mondo_327.json
 
-      - name: Salva Memoria Locale (Scanner)
+      - name: Salva Risultati nella Repo
         run: |
+          # Configurazione Git locale per salvare i dati
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
-          # Salviamo mondo_327.json così la prossima volta non parte da 0 quadranti
+          
+          # Aggiunge i file generati (mappa, database e inattivi)
           git add mondo_327.json db_327.json inattivi_327.json
-          git commit -m "🤖 Memoria locale aggiornata: $(date)" || echo "Nessuna modifica"
+          
+          # Esegue il commit e il push direttamente nella repo attuale
+          git commit -m "🤖 Update Mondo 327: $(date)" || echo "Nessuna modifica"
           git push
-
-      - name: Consegna Risultati a lk_database
-        env:
-          MY_PAT: ${{ secrets.PAT_GITHUB }}
-        run: |
-          # Cloniamo la repo target per caricare i file aggiornati
-          git clone https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git target_repo
-          cp mondo_327.json db_327.json inattivi_327.json target_repo/
-          cd target_repo
-          git config user.name "Re Panza Bot"
-          git config user.email "bot@repanza.it"
-          git add .
-          git commit -m "🤖 Update Mondo 327 via Scanner: $(date)" || exit 0
-          # Push sicuro con Token [Risolve Errore 128]
-          git push https://x-access-token:${MY_PAT}@github.com/Re-Panza/lk_database.git main
