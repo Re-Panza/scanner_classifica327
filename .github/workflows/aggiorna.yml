@@ -1,52 +1,37 @@
-const fs = require('fs');
+name: Scan Mondo 327 Unificato
 
-// USIAMO SOLO QUESTO FILE PER TUTTO
-const FILE = 'database_mondo_327.json';
+on:
+  schedule:
+    - cron: '30 */2 * * *'
+  workflow_dispatch:
 
-try {
-    if (!fs.existsSync(FILE)) {
-        console.error(`❌ Errore: Il file ${FILE} non esiste!`);
-        process.exit(1);
-    }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
-    const data = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    const now = new Date();
-    
-    // Creiamo una mappa dello stato attuale per confrontare i cambiamenti
-    // Usiamo una firma: "nome|punti"
-    const finalData = data.map(h => {
-        if (!h.p || h.p === 0) return h; // Salta castelli vuoti
+    steps:
+      - name: Checkout Codice
+        uses: actions/checkout@v3
 
-        const firmaAttuale = `${h.n}|${h.pt}`;
-        
-        // Se è la prima volta che vede questo castello con il nuovo sistema
-        if (!h.u) {
-            h.u = now.toISOString(); // ultima modifica
-            h.i = false;             // inattivo
-            h.f = firmaAttuale;      // firma
-            return h;
-        }
+      - name: Setup PHP e Node
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
 
-        // CONFRONTO: Se la firma è cambiata (punti o nome)
-        if (h.f !== firmaAttuale) {
-            h.u = now.toISOString();
-            h.i = false;
-            h.f = firmaAttuale;
-        } else {
-            // Se la firma è identica, controlliamo se sono passate 24 ore
-            const orePassate = (now - new Date(h.u)) / (1000 * 60 * 60);
-            if (orePassate >= 24) {
-                h.i = true;
-            }
-        }
+      - name: 1. Esecuzione Scanner
+        # PHP legge e scrive direttamente su database_mondo_327.json
+        run: php scanner.php 
 
-        return h;
-    });
+      - name: 2. Elaborazione Inattività
+        # Node legge e aggiorna lo stesso file database_mondo_327.json
+        run: node update_history.js
 
-    fs.writeFileSync(FILE, JSON.stringify(finalData, null, 2));
-    console.log(`✅ Database ${FILE} aggiornato con dati inattività.`);
-
-} catch (e) {
-    console.error("Errore:", e.message);
-    process.exit(1);
-}
+      - name: 3. Salva Risultati
+        run: |
+          git config --global user.name "Re Panza Bot"
+          git config --global user.email "bot@repanza.it"
+          git add database_mondo_327.json
+          git commit -m "🤖 Update Mondo 327: $(date)" || echo "Nessuna modifica"
+          git push
