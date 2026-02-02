@@ -2,8 +2,8 @@ name: Scan Mondo 327 Unificato
 
 on:
   schedule:
-    - cron: '30 */2 * * *' # Esecuzione ogni 2 ore al minuto 30
-  workflow_dispatch:      # Permette l'avvio manuale dalla scheda Actions
+    - cron: '30 */2 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -26,25 +26,20 @@ jobs:
           node-version: '16'
 
       - name: 1. Esecuzione Scanner
-        # Lo scanner genera il file temporaneo mondo_327.json
+        # PHP genera il file grezzo mondo_327.json
         run: php scanner.php 
 
-      - name: 2. Elaborazione Database Unico (Aggiunta Inattività)
-        # Lo script Node legge mondo_327.json e scrive database_mondo_327.json
+      - name: 2. Elaborazione Database Unico
+        # Node trasforma mondo_327.json in database_mondo_327.json con i campi u, i, f
         run: node update_history.js mondo_327.json
 
       - name: 3. Salva Risultati nella Repo
         run: |
-          # Configurazione Git
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
           
-          # Aggiungiamo il file finale unificato
+          # Forza Git a vedere i cambiamenti (aggiunge il nuovo, ignora se i vecchi mancano)
           git add database_mondo_327.json
           
-          # Pulizia automatica: rimuoviamo i file obsoleti per non sporcare la repo
-          git rm -f mondo_327.json database_mondocompleto327.json database_soloinattivi327.json inattivi_327.json db_327.json || echo "File vecchi non trovati, salto pulizia."
-          
-          # Commit e invio dei dati
-          git commit -m "🤖 Update Database Unificato (Inattività inclusa): $(date)" || echo "Nessuna modifica rilevata"
-          git push
+          # Rimuoviamo i vecchi file SOLO SE esistono, senza bloccare il workflow
+          rm -f mondo_327.json db_327.json database_mondocompleto327.json database_soloinattivi32
