@@ -1,27 +1,52 @@
 const fs = require('fs');
-const FILE = 'database_mondo_337.json';
+
+// USIAMO SOLO QUESTO FILE PER TUTTO
+const FILE = 'database_mondo_327.json';
 
 try {
-    const scanData = JSON.parse(fs.readFileSync('mondo337_temp.json', 'utf8'));
-    let storico = {};
-    if (fs.existsSync(FILE)) {
-        JSON.parse(fs.readFileSync(FILE, 'utf8')).forEach(h => {
-            if (h.p) storico[`${h.p}_${h.x}_${h.y}`] = h;
-        });
+    if (!fs.existsSync(FILE)) {
+        console.error(`❌ Errore: Il file ${FILE} non esiste!`);
+        process.exit(1);
     }
 
+    const data = JSON.parse(fs.readFileSync(FILE, 'utf8'));
     const now = new Date();
-    const finalData = scanData.map(h => {
-        if (!h.p) return h;
-        const s = storico[`${h.p}_${h.x}_${h.y}`];
-        const firma = `${h.n}|${h.pt}`;
+    
+    // Creiamo una mappa dello stato attuale per confrontare i cambiamenti
+    // Usiamo una firma: "nome|punti"
+    const finalData = data.map(h => {
+        if (!h.p || h.p === 0) return h; // Salta castelli vuoti
+
+        const firmaAttuale = `${h.n}|${h.pt}`;
         
-        h.u = (s && s.f === firma) ? s.u : now.toISOString();
-        h.i = (s && s.f === firma && (now - new Date(s.u)) > 86400000);
-        h.f = firma;
+        // Se è la prima volta che vede questo castello con il nuovo sistema
+        if (!h.u) {
+            h.u = now.toISOString(); // ultima modifica
+            h.i = false;             // inattivo
+            h.f = firmaAttuale;      // firma
+            return h;
+        }
+
+        // CONFRONTO: Se la firma è cambiata (punti o nome)
+        if (h.f !== firmaAttuale) {
+            h.u = now.toISOString();
+            h.i = false;
+            h.f = firmaAttuale;
+        } else {
+            // Se la firma è identica, controlliamo se sono passate 24 ore
+            const orePassate = (now - new Date(h.u)) / (1000 * 60 * 60);
+            if (orePassate >= 24) {
+                h.i = true;
+            }
+        }
+
         return h;
     });
 
     fs.writeFileSync(FILE, JSON.stringify(finalData, null, 2));
-    console.log("✅ Storico aggiornato.");
-} catch (e) { console.error(e.message); process.exit(1); }
+    console.log(`✅ Database ${FILE} aggiornato con dati inattività.`);
+
+} catch (e) {
+    console.error("Errore:", e.message);
+    process.exit(1);
+}
