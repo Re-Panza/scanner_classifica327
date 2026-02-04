@@ -1,37 +1,123 @@
-name: Scan Mondo 327 Unificato
+import aiohttp
+import asyncio
+import json
+import os
+import re
+import sys
 
-on:
-  schedule:
-    - cron: '30 */2 * * *'
-  workflow_dispatch:
+# --- CONFIGURAZIONE UNIVERSALE (Prende i dati dal Workflow) ---
+# Se non trova le variabili d'ambiente, usa i default per il 337
+SERVER_ID = os.getenv("LK_SERVER_ID", "LKWorldServer-IT-15") 
+BACKEND_URL = os.getenv("LK_BACKEND_URL", "http://backend1.lordsandknights.com")
+DB_FILENAME = os.getenv("LK_DB_FILE", "database_mondo_337.json")
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+CONCURRENCY = 50 # Numero di richieste parallele (Velocità!)
+RADIUS = 150     # Raggio di scansione
 
-    steps:
-      - name: Checkout Codice
-        uses: actions/checkout@v3
+async def fetch_tile(session, x, y):
+    """Scarica un singolo pezzo di mappa"""
+    url = f"{BACKEND_URL}/maps/{SERVER_ID}/{x}_{y}.jtile"
+    try:
+        async with session.get(url, timeout=10) as response:
+            if response.status == 200:
+                text = await response.text()
+                # Pulisce il formato strano di Xyrality: callback({...})
+                match = re.search(r'\((.*)\)', text, re.DOTALL)
+                if match:
+                    return json.loads(match.group(1))
+    except:
+        pass
+    return None
 
-      - name: Setup PHP e Node
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.1'
+async def worker(session, queue, results):
+    """Lavoratore instancabile che processa la coda"""
+    while True:
+        coord = await queue.get()
+        x, y = coord
+        data = await fetch_tile(session, x, y)
+        
+        if data and 'habitatArray' in data:
+            for h in data['habitatArray']:
+                # Chiave univoca
+                key = f"{h['mapx']}_{h['mapy']}"
+                results[key] = {
+                    'p': int(h['playerid']),
+                    'a': int(h['allianceid']),
+                    'n': h.get('name', ''),
+                    'x': int(h['mapx']),
+                    'y': int(h['mapy']),
+                    'pt': int(h['points']),
+                    't': int(h['habitattype']), # Nota: nel json è 'habitattype' o 'type'
+                    'd': int(asyncio.get_event_loop().time())
+                }
+        queue.task_done()
 
-      - name: 1. Esecuzione Scanner
-        # PHP legge e scrive direttamente su database_mondo_327.json
-        run: php scanner.php 
+async def main():
+    print(f"🌍 Avvio Scanner Universale per: {SERVER_ID}")
+    print(f"📡 Backend: {BACKEND_URL}")
+    print(f"💾 File Target: {DB_FILENAME}")
 
-      - name: 2. Elaborazione Inattività
-        # Node legge e aggiorna lo stesso file database_mondo_327.json
-        run: node update_history.js
+    # 1. Carica dati esistenti (Logica Punti Caldi del 327)
+    temp_map = {}
+    known_coords = set()
+    
+    if os.path.exists(DB_FILENAME):
+        try:
+            with open(DB_FILENAME, 'r', encoding='utf-8') as f:
+                old_data = json.load(f)
+                for entry in old_data:
+                    key = f"{entry['x']}_{entry['y']}"
+                    temp_map[key] = entry
+                    # Salviamo i centri dei quadranti già noti (ottimizzazione 327)
+                    qx, qy = entry['x'] // 32, entry['y'] // 32
+                    known_coords.add((qx * 32, qy * 32)) # Approssimazione centro
+            print(f"📚 Database caricato: {len(temp_map)} castelli noti.")
+        except:
+            print("⚠️ Database non trovato o corrotto. Si parte da zero.")
 
-      - name: 3. Salva Risultati
-        run: |
-          git config --global user.name "Re Panza Bot"
-          git config --global user.email "bot@repanza.it"
-          git add database_mondo_327.json
-          git commit -m "🤖 Update Mondo 327: $(date)" || echo "Nessuna modifica"
-          git push
+    queue = asyncio.Queue()
+    coords_to_scan = set()
+
+    # 2. Generazione Coordinate (Logica Espansione)
+    # Aggiungiamo i punti noti
+    for kx, ky in known_coords:
+        coords_to_scan.add((kx, ky))
+
+    # Aggiungiamo l'espansione a spirale/quadrato dal centro (512, 512)
+    CENTER_X, CENTER_Y = 512, 512
+    for r in range(0, RADIUS + 1, 1): # Scan ogni tile
+         for x in range(CENTER_X - r, CENTER_X + r + 1):
+             coords_to_scan.add((x, CENTER_Y - r))
+             coords_to_scan.add((x, CENTER_Y + r))
+         for y in range(CENTER_Y - r + 1, CENTER_Y + r):
+             coords_to_scan.add((CENTER_X - r, y))
+             coords_to_scan.add((CENTER_X + r, y))
+
+    # Carica la coda
+    for c in coords_to_scan:
+        queue.put_nowait(c)
+
+    print(f"🚀 Scansione parallela di {queue.qsize()} settori con {CONCURRENCY} workers...")
+
+    results = {}
+    async with aiohttp.ClientSession() as session:
+        workers = [asyncio.create_task(worker(session, queue, results)) for _ in range(CONCURRENCY)]
+        await queue.join()
+        for w in workers: w.cancel()
+
+    # 3. Merge e Salvataggio
+    temp_map.update(results)
+    
+    # Pulizia dati vecchi (> 72 ore) come nel PHP originale
+    # (Opzionale: puoi commentare se vuoi tenere tutto lo storico)
+    # cutoff = asyncio.get_event_loop().time() - (72 * 3600)
+    # temp_map = {k: v for k, v in temp_map.items() if v.get('d', 0) > cutoff}
+
+    final_list = list(temp_map.values())
+    with open(DB_FILENAME, 'w', encoding='utf-8') as f:
+        json.dump(final_list, f, indent=2, ensure_ascii=False)
+
+    print(f"✅ Fatto! {len(final_list)} castelli salvati in {DB_FILENAME}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
