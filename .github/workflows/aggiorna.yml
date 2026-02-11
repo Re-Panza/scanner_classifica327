@@ -12,26 +12,48 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout Codice
+      - name: Checkout Codice Scanner (Repo Corrente)
         uses: actions/checkout@v3
+        with:
+          path: main_repo
 
-      - name: Setup PHP e Node
+      - name: Checkout Database Cronologia (Secondo Repo)
+        uses: actions/checkout@v3
+        with:
+          repository: Re-Panza/lk_database
+          token: ${{ secrets.API_TOKEN_GITHUB }} # Usa il token creato prima
+          path: db_repo
+
+      - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
 
-      - name: 1. Esecuzione Scanner
-        # PHP legge e scrive direttamente su database_mondo_327.json
-        run: php scanner.php 
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: 1. Esecuzione Scanner e Cronologia
+        # Passiamo al PHP i percorsi dei due file JSON
+        run: php main_repo/scanner.php 
 
       - name: 2. Elaborazione Inattività
-        # Node legge e aggiorna lo stesso file database_mondo_327.json
-        run: node update_history.js
+        run: node main_repo/update_history.js
 
-      - name: 3. Salva Risultati
+      - name: 3. Salva Modifiche su Scanner (Mappa)
         run: |
+          cd main_repo
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
           git add database_mondo_327.json
-          git commit -m "🤖 Update Mondo 327: $(date)" || echo "Nessuna modifica"
-          git push
+          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 Update Mappa 327" && git push)
+
+      - name: 4. Salva Modifiche su Database (Cronologia)
+        run: |
+          cd db_repo
+          git config --global user.name "Re Panza Bot"
+          git config --global user.email "bot@repanza.it"
+          git add cronologia_327.json
+          # Pusha solo se ci sono cambiamenti nella cronologia
+          git diff --quiet && git diff --staged --quiet || (git commit -m "📜 Update Cronologia" && git push)
