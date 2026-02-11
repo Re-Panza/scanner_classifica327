@@ -2,8 +2,8 @@ name: Scan Mondo 327 Unificato
 
 on:
   schedule:
-    - cron: '30 */2 * * *' # Ogni 2 ore al minuto 30
-  workflow_dispatch: # Permette avvio manuale
+    - cron: '30 */2 * * *' # Ogni 2 ore
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,6 +20,13 @@ jobs:
         with:
           php-version: '8.1'
 
+      # --- MODIFICA QUI: Scarica dalla repo scanner_classifica327 ---
+      - name: Scarica Classifica Esterna
+        run: |
+          wget https://raw.githubusercontent.com/Re-Panza/scanner_classifica327/main/database_classificamondo327.json -O database_classificamondo327.json || \
+          wget https://raw.githubusercontent.com/Re-Panza/scanner_classifica327/master/database_classificamondo327.json -O database_classificamondo327.json
+        # Nota: Ho messo un doppio tentativo (main o master) per sicurezza.
+
       - name: 1. Esecuzione Scanner Mappa
         run: php scanner.php 
 
@@ -33,7 +40,7 @@ jobs:
         run: |
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
-          # Aggiungiamo esplicitamente history.json al commit
+          # Salviamo history.json QUI
           git add database_mondo_327.json history.json
-          git commit -m "🤖 Update & History: $(date)" || echo "Nessuna modifica da salvare"
+          git commit -m "🤖 Update & History: $(date)" || echo "Nessuna modifica"
           git push
