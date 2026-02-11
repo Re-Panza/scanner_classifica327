@@ -2,8 +2,8 @@ name: Scan Mondo 327 Unificato
 
 on:
   schedule:
-    - cron: '30 */2 * * *'
-  workflow_dispatch:
+    - cron: '30 */2 * * *' # Ogni 2 ore al minuto 30
+  workflow_dispatch: # Permette avvio manuale
 
 jobs:
   build:
@@ -20,18 +20,20 @@ jobs:
         with:
           php-version: '8.1'
 
-      - name: 1. Esecuzione Scanner
-        # PHP legge e scrive direttamente su database_mondo_327.json
+      - name: 1. Esecuzione Scanner Mappa
         run: php scanner.php 
 
       - name: 2. Elaborazione Inattività
-        # Node legge e aggiorna lo stesso file database_mondo_327.json
         run: node update_history.js
 
-      - name: 3. Salva Risultati
+      - name: 3. Tracciamento Storia (Tracker)
+        run: node tracker.js
+
+      - name: 4. Salva Risultati
         run: |
           git config --global user.name "Re Panza Bot"
           git config --global user.email "bot@repanza.it"
-          git add database_mondo_327.json
-          git commit -m "🤖 Update Mondo 327: $(date)" || echo "Nessuna modifica"
+          # Aggiungiamo esplicitamente history.json al commit
+          git add database_mondo_327.json history.json
+          git commit -m "🤖 Update & History: $(date)" || echo "Nessuna modifica da salvare"
           git push
